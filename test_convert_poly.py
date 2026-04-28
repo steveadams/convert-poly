@@ -464,6 +464,36 @@ def test_help_flag():
     assert result.returncode == 0
     assert "polygon" in result.stdout.lower()
     assert "--format" in result.stdout
+    # Shortcut flags advertised in --help
+    for shortcut in ("--decimal", "--dms", "--utm"):
+        assert shortcut in result.stdout
+
+
+# ---------------------------------------------------------------------------
+# Shortcut flags — `--decimal`, `--dms`, `--utm` are equivalent to
+# `--format <name>` and must not be combinable.
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("fmt", ["decimal", "dms", "utm"])
+def test_shortcut_flag_matches_format_flag(fmt):
+    """`--utm` produces the same output as `--format utm`, etc."""
+    short = run_cli(f"--{fmt}")
+    long = run_cli("--format", fmt)
+    assert short.returncode == 0
+    assert short.stdout == long.stdout
+    assert short.stdout == (HERE / f"sample_output_{fmt}.txt").read_text()
+
+
+@pytest.mark.parametrize("flags", [
+    ("--dms", "--utm"),
+    ("--decimal", "--dms"),
+    ("--format", "utm", "--dms"),
+])
+def test_conflicting_format_flags_rejected(flags):
+    """Mutually exclusive group: combining format flags is a usage error."""
+    result = run_cli(*flags)
+    assert result.returncode == 2
+    assert "not allowed with" in result.stderr
 
 
 # ---------------------------------------------------------------------------

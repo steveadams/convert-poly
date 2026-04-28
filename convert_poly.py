@@ -243,11 +243,24 @@ def main() -> None:
         description="Convert a CHS polygon description file to a coordinate list.",
     )
     parser.add_argument("input_file", help="path to the CHS polygon file")
-    parser.add_argument(
+    fmt_group = parser.add_mutually_exclusive_group()
+    fmt_group.add_argument(
         "--format",
         choices=list(_FORMATTERS),
         default="decimal",
         help="output format (default: decimal)",
+    )
+    fmt_group.add_argument(
+        "--decimal", dest="format", action="store_const", const="decimal",
+        help="shortcut for --format decimal",
+    )
+    fmt_group.add_argument(
+        "--dms", dest="format", action="store_const", const="dms",
+        help="shortcut for --format dms",
+    )
+    fmt_group.add_argument(
+        "--utm", dest="format", action="store_const", const="utm",
+        help="shortcut for --format utm",
     )
     args = parser.parse_args()
 

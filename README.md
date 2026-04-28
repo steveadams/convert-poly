@@ -52,20 +52,21 @@ This prints the format header on screen, prints the data on screen, and
 quietly copies the data to your clipboard. From there you can paste it
 into Excel, an email, or wherever you need it.
 
-To pick a different format:
+To pick a different format, use one of the shortcut flags:
 
 ```
-python convert_poly.py polygon.txt --format dms
-python convert_poly.py polygon.txt --format utm
+python convert_poly.py polygon.txt --dms
+python convert_poly.py polygon.txt --utm
 ```
 
 There are exactly three formats: `decimal` (the default), `dms`, and
-`utm`. Each invocation produces one format.
+`utm`. Each invocation produces one format. The longer form
+`--format dms` / `--format utm` works too if you prefer it.
 
 Example:
 
 ```
-> python convert_poly.py sample_input.txt --format utm
+> python convert_poly.py sample_input.txt --utm
 Format: UTM Zone 9N — WGS84
 
 447540.35, 5912979.17
