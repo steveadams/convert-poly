@@ -18,27 +18,44 @@ jobs:
       - name: Run pytest
         run: pytest test_convert_poly.py -v
 
-  powershell-tests:
-    # Matrix runs the same Pester suite under both PowerShell hosts
-    # available on Windows runners:
-    #   - pwsh:        PowerShell 7+ (cross-platform, .NET Core)
-    #   - powershell:  Windows PowerShell 5.1 (built into Windows, .NET Framework)
-    # CHS users overwhelmingly have 5.1, so coverage there is the point.
-    name: PowerShell tests (Windows, ${{ matrix.shell }})
+  # Two PowerShell hosts ship on Windows runners. CHS users overwhelmingly
+  # use Windows PowerShell 5.1, so coverage there is the point; pwsh
+  # (PowerShell 7+, .NET Core) is included for forward compatibility.
+  # Split into two jobs because GitHub's workflow validator rejects
+  # ${{ matrix.shell }} interpolation in the step-level `shell:` field.
+
+  powershell-tests-pwsh:
+    name: PowerShell tests (Windows, pwsh / PS 7+)
     runs-on: windows-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        shell: [pwsh, powershell]
     steps:
       - uses: actions/checkout@v4
       - name: Show host PowerShell + Pester version
-        shell: ${{ matrix.shell }}
+        shell: pwsh
         run: |
           $PSVersionTable | Format-List
           Get-Module -ListAvailable Pester | Select-Object Name, Version, Path
       - name: Run Pester tests
-        shell: ${{ matrix.shell }}
+        shell: pwsh
+        run: |
+          Import-Module Pester -MinimumVersion 5.0.0 -ErrorAction Stop
+          $cfg = New-PesterConfiguration
+          $cfg.Run.Path = './convert_poly.Tests.ps1'
+          $cfg.Run.Exit = $true
+          $cfg.Output.Verbosity = 'Detailed'
+          Invoke-Pester -Configuration $cfg
+
+  powershell-tests-ps51:
+    name: PowerShell tests (Windows, powershell / PS 5.1)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Show host PowerShell + Pester version
+        shell: powershell
+        run: |
+          $PSVersionTable | Format-List
+          Get-Module -ListAvailable Pester | Select-Object Name, Version, Path
+      - name: Run Pester tests
+        shell: powershell
         run: |
           Import-Module Pester -MinimumVersion 5.0.0 -ErrorAction Stop
           $cfg = New-PesterConfiguration
