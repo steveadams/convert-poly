@@ -1,47 +1,30 @@
 """
-convert_poly.py — Convert CHS polygon description files to coordinate lists.
+convert_poly.py — Convert CHS polygon description files to WGS84
+decimal-degree coordinate lists.
 
 Reads a CHS polygon file (whitespace-separated columns: index, latitude,
-longitude, ...) and prints the closed polygon ring in one of three formats:
-decimal degrees (default), DMS, or UTM.
+longitude, ...) and prints the closed polygon ring as one
+"lat, lon" line per vertex.
 
 Datum: WGS84 only. If the input mentions NAD83 or CSRS, the script aborts
 rather than silently produce wrong coordinates.
 
 Output streams:
-  - The format header (e.g. "Format: UTM Zone 9N — WGS84") goes to STDERR.
+  - The format header ("Format: Decimal Degrees - WGS84") goes to STDERR.
   - The coordinate data goes to STDOUT.
 This way `convert_poly.py file.txt | clip` puts only the data on the
 clipboard, while running interactively shows both header and data on the
 terminal. When STDOUT is a terminal, the data is also auto-copied to the
 clipboard via pyperclip.
 
-To change how a format looks, edit the corresponding function below:
-  - format_decimal()  — decimal degrees
-  - format_dms()      — degrees-minutes-seconds
-  - format_utm()      — UTM easting/northing
-The three functions deliberately repeat structure so each can be edited in
-isolation without understanding the others.
+To change how the output looks (column separator, precision, etc.), edit
+format_decimal() below.
 """
 
 import argparse
 import re
 import sys
 
-try:
-    import utm
-except ImportError:
-    sys.stderr.write(
-        "error: this script needs the 'utm' package, which doesn't appear "
-        "to be installed.\n"
-        "\n"
-        "Open cmd.exe and run:\n"
-        "\n"
-        "    pip install utm pyperclip\n"
-        "\n"
-        "then try again.\n"
-    )
-    sys.exit(1)
 
 # ---------------------------------------------------------------------------
 # Parsing
@@ -142,51 +125,17 @@ def close_ring(
 
 
 # ---------------------------------------------------------------------------
-# DMS helper
-# ---------------------------------------------------------------------------
-
-
-def to_dms(dd: float, is_lat: bool) -> str:
-    """Format a signed decimal degree value as e.g. '53-21-48.00N'.
-
-    Longitude gets a 3-digit degree pad; latitude gets 2. Seconds are
-    rounded to 2 decimals; the function rebalances any 60.00 carry so the
-    output never reads '...-59-60.00'.
-    """
-    sign_pos = dd >= 0
-    a = abs(dd)
-    deg = int(a)
-    rem = (a - deg) * 60.0
-    mins = int(rem)
-    secs = (rem - mins) * 60.0
-
-    # Carry: if rounding seconds to 2dp pushes us to 60.00, bubble up.
-    secs_rounded = round(secs, 2)
-    if secs_rounded >= 60.0:
-        secs_rounded = 0.0
-        mins += 1
-    if mins >= 60:
-        mins = 0
-        deg += 1
-
-    if is_lat:
-        hemi = "N" if sign_pos else "S"
-        return f"{deg:02d}-{mins:02d}-{secs_rounded:05.2f}{hemi}"
-    else:
-        hemi = "E" if sign_pos else "W"
-        return f"{deg:03d}-{mins:02d}-{secs_rounded:05.2f}{hemi}"
-
-
-# ---------------------------------------------------------------------------
-# Format functions — edit these to change output appearance.
-# Each returns (header_line, body_text). main() writes header to stderr and
+# Output formatting — edit this function to change how the output looks.
+# Returns (header_line, body_text). main() writes header to stderr and
 # body to stdout.
 # ---------------------------------------------------------------------------
 
 
-def format_decimal(points: list[tuple[int, float, float, int, int]]) -> tuple[str, str]:
+def format_decimal(
+    points: list[tuple[int, float, float, int, int]],
+) -> tuple[str, str]:
     """Decimal degrees, preserving each token's original precision."""
-    header = "Format: Decimal Degrees — WGS84"
+    header = "Format: Decimal Degrees - WGS84"
     lines = [
         f"{lat:.{lat_dec}f}, {lon:.{lon_dec}f}"
         for _, lat, lon, lat_dec, lon_dec in points
@@ -194,80 +143,23 @@ def format_decimal(points: list[tuple[int, float, float, int, int]]) -> tuple[st
     return header, "\n".join(lines) + "\n"
 
 
-def format_dms(points: list[tuple[int, float, float, int, int]]) -> tuple[str, str]:
-    """DMS (e.g. 53-21-48.00N, 129-47-18.00W), 2 decimals on seconds."""
-    header = "Format: DMS — WGS84"
-    lines = [
-        f"{to_dms(lat, is_lat=True)}, {to_dms(lon, is_lat=False)}"
-        for _, lat, lon, _, _ in points
-    ]
-    return header, "\n".join(lines) + "\n"
-
-
-def format_utm(points: list[tuple[int, float, float, int, int]]) -> tuple[str, str]:
-    """UTM easting/northing, 2 decimals. All vertices must share one zone
-    AND one hemisphere (northings reset across the equator)."""
-    _, lat0, lon0, _, _ = points[0]
-    e0, n0, zone, _band = utm.from_latlon(lat0, lon0)
-    hemi = "N" if lat0 >= 0 else "S"
-
-    rows = [(e0, n0)]
-    for _, lat, lon, _, _ in points[1:]:
-        e, n, z, _b = utm.from_latlon(lat, lon)
-        h = "N" if lat >= 0 else "S"
-        if z != zone or h != hemi:
-            raise ValueError(
-                f"polygon spans multiple UTM zones ({zone}{hemi} and {z}{h}); "
-                "this tool only handles single-zone polygons"
-            )
-        rows.append((e, n))
-
-    header = f"Format: UTM Zone {zone}{hemi} — WGS84"
-    body = "\n".join(f"{e:.2f}, {n:.2f}" for e, n in rows) + "\n"
-    return header, body
-
-
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
-_FORMATTERS = {
-    "decimal": format_decimal,
-    "dms": format_dms,
-    "utm": format_utm,
-}
-
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Convert a CHS polygon description file to a coordinate list.",
+        description="Convert a CHS polygon description file to a WGS84 "
+                    "decimal-degree coordinate list.",
     )
     parser.add_argument("input_file", help="path to the CHS polygon file")
-    fmt_group = parser.add_mutually_exclusive_group()
-    fmt_group.add_argument(
-        "--format",
-        choices=list(_FORMATTERS),
-        default="decimal",
-        help="output format (default: decimal)",
-    )
-    fmt_group.add_argument(
-        "--decimal", dest="format", action="store_const", const="decimal",
-        help="shortcut for --format decimal",
-    )
-    fmt_group.add_argument(
-        "--dms", dest="format", action="store_const", const="dms",
-        help="shortcut for --format dms",
-    )
-    fmt_group.add_argument(
-        "--utm", dest="format", action="store_const", const="utm",
-        help="shortcut for --format utm",
-    )
     args = parser.parse_args()
 
     try:
         points = parse_file(args.input_file)
         points = close_ring(points)
-        header, body = _FORMATTERS[args.format](points)
+        header, body = format_decimal(points)
     except FileNotFoundError as e:
         print(f"error: {e}", file=sys.stderr)
         sys.exit(1)

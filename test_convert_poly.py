@@ -6,7 +6,7 @@ They deliberately avoid asserting on internal function shapes so the
 implementation can change freely.
 
 Dev-only deps (NOT required by the shipped script):
-    pip install pytest pyproj
+    pip install pytest
 
 Run:
     pytest test_convert_poly.py -v
@@ -49,21 +49,12 @@ CANONICAL_BODY = (
 
 
 # ---------------------------------------------------------------------------
-# Canonical fixture round-trip — covers default format, all three formats,
-# and that the closed-ring contract is satisfied byte-for-byte.
+# Canonical fixture round-trip.
 # ---------------------------------------------------------------------------
 
-@pytest.mark.parametrize("fmt", ["decimal", "dms", "utm"])
-def test_format_matches_fixture(fmt):
-    result = run_cli("--format", fmt)
-    assert result.returncode == 0, result.stderr
-    expected = (HERE / f"sample_output_{fmt}.txt").read_text()
-    assert result.stdout == expected
-
-
-def test_default_format_is_decimal():
+def test_decimal_matches_fixture():
     result = run_cli()
-    assert result.returncode == 0
+    assert result.returncode == 0, result.stderr
     expected = (HERE / "sample_output_decimal.txt").read_text()
     assert result.stdout == expected
 
@@ -80,20 +71,12 @@ def test_header_goes_to_stderr_data_to_stdout():
     assert "Format:" not in result.stdout
 
 
-def test_utm_header_names_zone_and_hemisphere():
-    result = run_cli("--format", "utm")
-    assert result.returncode == 0
-    # Canonical polygon is in BC, zone 9N
-    assert "Zone 9N" in result.stderr
-
-
 # ---------------------------------------------------------------------------
 # Polygon closure — script always emits a closed ring, but never duplicates
 # a vertex when the input is already closed.
 # ---------------------------------------------------------------------------
 
 def test_open_polygon_is_closed_in_output():
-    # Canonical input is open (4 vertices); output must be 5 lines.
     result = run_cli()
     lines = result.stdout.strip().splitlines()
     assert len(lines) == 5
@@ -109,7 +92,7 @@ def test_closed_polygon_is_not_double_closed(tmp_path):
     )
     assert result.returncode == 0
     lines = result.stdout.strip().splitlines()
-    assert len(lines) == 5  # not 6
+    assert len(lines) == 5
     assert lines[0] == lines[-1]
 
 
@@ -143,10 +126,7 @@ def test_non_wgs84_datum_rejected(tmp_path, marker):
 
 def test_transposed_columns_rejected(tmp_path):
     """Latitude column with E/W suffix (likely a transposed file)."""
-    body = (
-        "\tLat\tLon\n"
-        "1\t53.0E\t125.0W\n"  # latitude with E suffix — wrong axis
-    )
+    body = "\tLat\tLon\n1\t53.0E\t125.0W\n"
     p = write_input(tmp_path, body)
     result = subprocess.run(
         [sys.executable, str(SCRIPT), str(p)],
@@ -157,10 +137,7 @@ def test_transposed_columns_rejected(tmp_path):
 
 
 def test_longitude_with_ns_suffix_rejected(tmp_path):
-    body = (
-        "\tLat\tLon\n"
-        "1\t53.0N\t125.0N\n"  # longitude with N suffix
-    )
+    body = "\tLat\tLon\n1\t53.0N\t125.0N\n"
     p = write_input(tmp_path, body)
     result = subprocess.run(
         [sys.executable, str(SCRIPT), str(p)],
@@ -171,9 +148,9 @@ def test_longitude_with_ns_suffix_rejected(tmp_path):
 
 
 @pytest.mark.parametrize("lat_token, lon_token", [
-    ("91.0N", "125.0W"),    # lat > 90
-    ("53.0N", "181.0W"),    # lon > 180
-    ("99.999999N", "0.0E"),  # lat just over 90 with high precision
+    ("91.0N", "125.0W"),
+    ("53.0N", "181.0W"),
+    ("99.999999N", "0.0E"),
 ])
 def test_out_of_range_coord_rejected(tmp_path, lat_token, lon_token):
     body = f"\tLat\tLon\n1\t{lat_token}\t{lon_token}\n"
@@ -198,94 +175,8 @@ def test_malformed_coord_rejected(tmp_path, bad):
 
 
 # ---------------------------------------------------------------------------
-# UTM correctness — single-zone enforcement, southern hemisphere, equator
-# crossing, independent cross-check via pyproj.
-# ---------------------------------------------------------------------------
-
-def test_multi_zone_polygon_rejected_for_utm(tmp_path):
-    # lon -127 → zone 9; lon -121 → zone 10.
-    body = (
-        "\tLat\tLon\n"
-        "1\t53.0N\t127.0W\n"
-        "2\t54.0N\t127.0W\n"
-        "3\t54.0N\t121.0W\n"
-        "4\t53.0N\t121.0W\n"
-    )
-    p = write_input(tmp_path, body)
-    result = subprocess.run(
-        [sys.executable, str(SCRIPT), str(p), "--format", "utm"],
-        capture_output=True, text=True,
-    )
-    assert result.returncode == 1
-    assert "zone" in result.stderr.lower()
-
-
-def test_multi_zone_polygon_ok_for_decimal(tmp_path):
-    """Multi-zone is only an error for UTM, not for decimal/DMS."""
-    body = (
-        "\tLat\tLon\n"
-        "1\t53.0N\t127.0W\n"
-        "2\t54.0N\t127.0W\n"
-        "3\t54.0N\t121.0W\n"
-        "4\t53.0N\t121.0W\n"
-    )
-    p = write_input(tmp_path, body)
-    result = subprocess.run(
-        [sys.executable, str(SCRIPT), str(p)],
-        capture_output=True, text=True,
-    )
-    assert result.returncode == 0
-
-
-def test_equator_crossing_rejected_for_utm(tmp_path):
-    """Northings reset across the equator; mixing them would be silently wrong."""
-    body = (
-        "\tLat\tLon\n"
-        "1\t1.0N\t30.0E\n"
-        "2\t1.0N\t31.0E\n"
-        "3\t1.0S\t31.0E\n"
-        "4\t1.0S\t30.0E\n"
-    )
-    p = write_input(tmp_path, body)
-    result = subprocess.run(
-        [sys.executable, str(SCRIPT), str(p), "--format", "utm"],
-        capture_output=True, text=True,
-    )
-    assert result.returncode == 1
-
-
-def test_southern_hemisphere_utm_header(tmp_path):
-    body = (
-        "\tLat\tLon\n"
-        "1\t40.0S\t175.0E\n"
-        "2\t41.0S\t175.0E\n"
-        "3\t41.0S\t176.0E\n"
-        "4\t40.0S\t176.0E\n"
-    )
-    p = write_input(tmp_path, body)
-    result = subprocess.run(
-        [sys.executable, str(SCRIPT), str(p), "--format", "utm"],
-        capture_output=True, text=True,
-    )
-    assert result.returncode == 0
-    assert "Zone 60S" in result.stderr
-
-
-def test_utm_independent_check():
-    """Cross-check UTM output against pyproj. Skipped if pyproj missing."""
-    pyproj = pytest.importorskip("pyproj")
-    transformer = pyproj.Transformer.from_crs(
-        "EPSG:4326", "EPSG:32609", always_xy=True
-    )
-    expected_e, expected_n = transformer.transform(-129.788333, 53.363333)
-    first_line = (HERE / "sample_output_utm.txt").read_text().splitlines()[0]
-    e_str, n_str = [s.strip() for s in first_line.split(",")]
-    assert float(e_str) == pytest.approx(expected_e, abs=0.01)
-    assert float(n_str) == pytest.approx(expected_n, abs=0.01)
-
-
-# ---------------------------------------------------------------------------
-# Decimal precision preservation.
+# Decimal precision preservation — different vertices may carry different
+# precision; output should round-trip each one.
 # ---------------------------------------------------------------------------
 
 def test_mixed_precision_preserved(tmp_path):
@@ -305,68 +196,6 @@ def test_mixed_precision_preserved(tmp_path):
     lines = result.stdout.splitlines()
     assert lines[0] == "53.36, -125.788333"
     assert lines[1] == "53.0, -125.0"
-
-
-# ---------------------------------------------------------------------------
-# DMS correctness — output structure and the seconds=60 carry case.
-# ---------------------------------------------------------------------------
-
-def test_dms_never_emits_60_seconds(tmp_path):
-    """A latitude that nearly hits 54° must round up cleanly, not wrap to ...-60.00."""
-    body = (
-        "\tLat\tLon\n"
-        "1\t53.9999999N\t125.0W\n"  # 7 nines triggers seconds → 60.00 → carry
-        "2\t53.0N\t125.0W\n"
-        "3\t53.0N\t124.0W\n"
-        "4\t53.5N\t124.0W\n"
-    )
-    p = write_input(tmp_path, body)
-    result = subprocess.run(
-        [sys.executable, str(SCRIPT), str(p), "--format", "dms"],
-        capture_output=True, text=True,
-    )
-    assert result.returncode == 0
-    assert "-60.00" not in result.stdout
-    # And the carried-up vertex should have rolled to 54-00-00.00.
-    assert "54-00-00.00N" in result.stdout.splitlines()[0]
-
-
-def test_dms_lines_well_formed():
-    """Every DMS line is two coords like 'DD-MM-SS.SSH, DDD-MM-SS.SSH'."""
-    import re
-    result = run_cli("--format", "dms")
-    pattern = re.compile(
-        r"^\d{2}-\d{2}-\d{2}\.\d{2}[NS], \d{3}-\d{2}-\d{2}\.\d{2}[EW]$"
-    )
-    for line in result.stdout.splitlines():
-        assert pattern.match(line), f"malformed DMS line: {line!r}"
-
-
-def test_dms_round_trip_within_arcsecond(tmp_path):
-    """DMS values, parsed back to decimal degrees, should match the
-    decimal-degrees output to within ~0.01 arcsecond."""
-    p = write_input(tmp_path, CANONICAL_BODY)
-    dms = subprocess.run(
-        [sys.executable, str(SCRIPT), str(p), "--format", "dms"],
-        capture_output=True, text=True,
-    )
-    dec = subprocess.run(
-        [sys.executable, str(SCRIPT), str(p)],
-        capture_output=True, text=True,
-    )
-    assert dms.returncode == 0 and dec.returncode == 0
-
-    def from_dms(token):
-        sign = -1 if token[-1] in "SW" else 1
-        d, m, s = token[:-1].split("-")
-        return sign * (float(d) + float(m) / 60 + float(s) / 3600)
-
-    tol = 1.0 / 360_000  # ~0.01 arcsecond in decimal degrees
-    for dms_line, dec_line in zip(dms.stdout.splitlines(), dec.stdout.splitlines()):
-        dms_lat, dms_lon = [from_dms(t.strip()) for t in dms_line.split(",")]
-        dec_lat, dec_lon = [float(t.strip()) for t in dec_line.split(",")]
-        assert abs(dms_lat - dec_lat) < tol
-        assert abs(dms_lon - dec_lon) < tol
 
 
 # ---------------------------------------------------------------------------
@@ -408,10 +237,7 @@ def test_blank_lines_in_input_ignored(tmp_path):
 
 
 def test_row_with_missing_columns_rejected(tmp_path):
-    body = (
-        "\tLat\tLon\n"
-        "1\t53.363333N\n"  # only one coord column
-    )
+    body = "\tLat\tLon\n1\t53.363333N\n"
     p = write_input(tmp_path, body)
     result = subprocess.run(
         [sys.executable, str(SCRIPT), str(p)],
@@ -422,7 +248,7 @@ def test_row_with_missing_columns_rejected(tmp_path):
 
 
 def test_no_data_rows_error(tmp_path):
-    body = "\tLat\tLon\nfoo bar baz\n"  # both lines non-data
+    body = "\tLat\tLon\nfoo bar baz\n"
     p = write_input(tmp_path, body)
     result = subprocess.run(
         [sys.executable, str(SCRIPT), str(p)],
@@ -451,11 +277,6 @@ def test_missing_required_arg_exits_2():
     assert result.returncode == 2
 
 
-def test_unknown_format_exits_2():
-    result = run_cli("--format", "kml")
-    assert result.returncode == 2
-
-
 def test_help_flag():
     result = subprocess.run(
         [sys.executable, str(SCRIPT), "--help"],
@@ -463,72 +284,25 @@ def test_help_flag():
     )
     assert result.returncode == 0
     assert "polygon" in result.stdout.lower()
-    assert "--format" in result.stdout
-    # Shortcut flags advertised in --help
-    for shortcut in ("--decimal", "--dms", "--utm"):
-        assert shortcut in result.stdout
 
 
 # ---------------------------------------------------------------------------
-# Shortcut flags — `--decimal`, `--dms`, `--utm` are equivalent to
-# `--format <name>` and must not be combinable.
+# Missing pyperclip is non-fatal — the script still emits coordinates.
+# We simulate "package not installed" by injecting a stub on PYTHONPATH
+# that raises ImportError on import.
 # ---------------------------------------------------------------------------
-
-@pytest.mark.parametrize("fmt", ["decimal", "dms", "utm"])
-def test_shortcut_flag_matches_format_flag(fmt):
-    """`--utm` produces the same output as `--format utm`, etc."""
-    short = run_cli(f"--{fmt}")
-    long = run_cli("--format", fmt)
-    assert short.returncode == 0
-    assert short.stdout == long.stdout
-    assert short.stdout == (HERE / f"sample_output_{fmt}.txt").read_text()
-
-
-@pytest.mark.parametrize("flags", [
-    ("--dms", "--utm"),
-    ("--decimal", "--dms"),
-    ("--format", "utm", "--dms"),
-])
-def test_conflicting_format_flags_rejected(flags):
-    """Mutually exclusive group: combining format flags is a usage error."""
-    result = run_cli(*flags)
-    assert result.returncode == 2
-    assert "not allowed with" in result.stderr
-
-
-# ---------------------------------------------------------------------------
-# Missing-dependency hints — first-time CHS user forgot to run pip install.
-# We simulate "package not installed" by injecting a stub package on
-# PYTHONPATH that raises ImportError on import.
-# ---------------------------------------------------------------------------
-
-def _run_with_stub(tmp_path, stub_name, *args, input_path=SAMPLE):
-    stub_dir = tmp_path / "stubs"
-    stub_dir.mkdir()
-    (stub_dir / f"{stub_name}.py").write_text(
-        f"raise ImportError('simulated: {stub_name} not installed')\n"
-    )
-    env = {**os.environ, "PYTHONPATH": str(stub_dir)}
-    return subprocess.run(
-        [sys.executable, str(SCRIPT), str(input_path), *args],
-        capture_output=True, text=True, env=env,
-    )
-
-
-def test_missing_utm_gives_friendly_install_hint(tmp_path):
-    result = _run_with_stub(tmp_path, "utm")
-    assert result.returncode == 1
-    assert "pip install utm pyperclip" in result.stderr
-    # No raw Python traceback should reach the user.
-    assert "Traceback" not in result.stderr
-
 
 def test_missing_pyperclip_does_not_block_output(tmp_path):
-    """Clipboard is optional — the script should still emit data successfully."""
-    result = _run_with_stub(tmp_path, "pyperclip")
+    stub_dir = tmp_path / "stubs"
+    stub_dir.mkdir()
+    (stub_dir / "pyperclip.py").write_text(
+        "raise ImportError('simulated: pyperclip not installed')\n"
+    )
+    env = {**os.environ, "PYTHONPATH": str(stub_dir)}
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), str(SAMPLE)],
+        capture_output=True, text=True, env=env,
+    )
     assert result.returncode == 0
-    # Coordinate output is unaffected.
     assert result.stdout == (HERE / "sample_output_decimal.txt").read_text()
-    # When stdout is a pipe (as in this test), the clipboard branch is
-    # skipped entirely, so no pyperclip-specific hint is expected.
     assert "Traceback" not in result.stderr
