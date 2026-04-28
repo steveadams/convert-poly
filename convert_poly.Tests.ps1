@@ -1,9 +1,9 @@
 <#
 Pester 5 acceptance tests for convert_poly.ps1.
 
-Mirrors test_convert_poly.py: the tests target observable CLI behaviour
-(input file -> exit code, stdout, stderr) and avoid asserting on
-internal function shapes so the script can be refactored freely.
+Tests target observable CLI behaviour (input file -> exit code, stdout,
+stderr) and avoid asserting on internal function shapes so the script
+can be refactored freely.
 
 Run with:
     Invoke-Pester ./convert_poly.Tests.ps1 -Output Detailed

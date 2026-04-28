@@ -2,169 +2,106 @@
 
 ## What this does
 
-This repo provides two equivalent tools that read a CHS polygon
-description file (the kind with columns for index, latitude, longitude,
-distance, and angle) and print the polygon's vertices as a list of
-WGS84 decimal-degree coordinates. Output is automatically copied to
-your clipboard so you can paste it straight into another program.
+Reads a CHS polygon description file (the kind with columns for index,
+latitude, longitude, distance, and angle) and prints the polygon's
+vertices as a list of WGS84 decimal-degree coordinates. The output is
+auto-copied to your clipboard so you can paste it straight into Excel,
+an email, or wherever you need it.
 
-- **`convert_poly.py`** — Python version. Pick this one if your team
-  already uses Python or if you're on a non-Windows machine.
-- **`convert_poly.ps1`** — PowerShell version. Pick this one if you
-  don't want to install Python; PowerShell is built into Windows.
-- **`convert_poly.bat`** — a one-line wrapper around the PowerShell
-  version that gives you a no-typing experience: double-click it to
-  pop a file picker, or drag a `.txt` onto it to convert that file
-  immediately. See "Easy mode" below.
+The script assumes WGS84. If your file mentions NAD83 or CSRS it will
+refuse to run rather than give you wrong numbers.
 
-Both scripts produce identical output. The rest of this README covers
-the Python version first; the PowerShell instructions are toward the
-bottom and the easy-mode `.bat` instructions are last.
+The repo contains two files you actually use:
 
-The scripts assume WGS84. If your file mentions NAD83 or CSRS they
-will refuse to run rather than give you wrong numbers.
+- **`convert_poly.bat`** — what you click. Opens a file picker, or
+  accepts a file dragged onto it.
+- **`convert_poly.ps1`** — the actual conversion script. The `.bat`
+  calls this; you don't need to touch it directly.
 
-## Install Python
+PowerShell is built into every modern Windows machine, so there is
+nothing to install.
 
-1. Go to <https://www.python.org/downloads/> and download Python 3.10 or
-   newer for Windows.
-2. Run the installer.
-3. **Important:** on the first screen of the installer, tick the
-   checkbox labelled **"Add python.exe to PATH"** before clicking
-   Install. Without this checkbox you won't be able to run `python` from
-   the command prompt.
+## First-time setup (about 5 minutes)
 
-To confirm it worked, open `cmd.exe` and run:
+1. Open <https://github.com/steveadams/convert-poly> in a browser.
+2. Click the green **Code** button → **Download ZIP**.
+3. Find the ZIP in your **Downloads** folder. Right-click it →
+   **Properties** → tick **Unblock** → **OK**. (This clears the
+   "downloaded from internet" tag on every extracted file in one go.
+   Skip this and you may see a SmartScreen warning later — you can
+   still proceed past it, but unblocking up front avoids the friction.)
+4. Right-click the ZIP again → **Extract All...** → choose somewhere
+   easy to find (Desktop or Documents). You'll get a folder named
+   `convert-poly-main` (or similar).
+5. Open that folder. Keep `convert_poly.bat` and `convert_poly.ps1`
+   together — the `.bat` looks for the `.ps1` in the same folder.
 
-```
-python --version
-```
+## Your first conversion
 
-You should see something like `Python 3.12.4`.
+6. Find the CHS polygon `.txt` file you want to convert.
+7. **Drag it onto** `convert_poly.bat`. (Or double-click the `.bat`
+   first and pick the file from the dialog.)
+8. A console window opens and shows something like:
 
-## Install dependency
+   ```
+   Format: Decimal Degrees - WGS84
 
-In `cmd.exe`, run:
+   53.363333, -129.788333
+   53.385278, -129.788333
+   53.385278, -129.755000
+   53.363333, -129.755000
+   53.363333, -129.788333
 
-```
-pip install pyperclip
-```
+   Coordinates copied to clipboard.
+   Press any key to continue . . .
+   ```
 
-That's the only library the script needs — `pyperclip` is what enables
-the auto-clipboard.
-
-## Run
-
-```
-python convert_poly.py path\to\polygon.txt
-```
-
-This prints a one-line header on screen, prints the coordinates on
-screen, and quietly copies the coordinates to your clipboard. From
-there you can paste them into Excel, an email, or wherever you need
-them.
-
-Example:
-
-```
-> python convert_poly.py sample_input.txt
-Format: Decimal Degrees - WGS84
-
-53.363333, -129.788333
-53.385278, -129.788333
-53.385278, -129.755000
-53.363333, -129.755000
-53.363333, -129.788333
-```
+9. Press any key to close the window.
+10. Switch to Excel / email / wherever the coordinates need to go,
+    and paste with **Ctrl+V**.
 
 The polygon is always emitted **closed** (first vertex repeated at the
 end) so the output is ready to drop into a GIS tool that expects a
 closed ring.
 
-## Advanced: piping
-
-If you're comfortable with the command line, you can pipe the output to
-another program. The format header is printed to **stderr** and the
-data to **stdout**, so piping captures only the data — no header noise.
-
-```
-:: cmd.exe — copy data to the clipboard without the header
-python convert_poly.py polygon.txt | clip
-
-:: PowerShell — same, using its native clipboard cmdlet
-python convert_poly.py polygon.txt | Set-Clipboard
-
-:: Save data to a file
-python convert_poly.py polygon.txt > out.txt
-```
-
-## Editing the output
-
-The output is produced by the `format_decimal()` function near the
-bottom of `convert_poly.py`. Edit that function to tweak how the
-output looks (column separator, precision, etc.).
-
 ## Troubleshooting
 
-**`'python' is not recognized as an internal or external command`** —
-Python isn't on your PATH. Re-run the Python installer and make sure
-the "Add python.exe to PATH" checkbox is ticked.
+**"Windows protected your PC" (SmartScreen)** — click *More info* →
+*Run anyway*. Happens once per file on a new machine. Unblocking the
+ZIP before extracting (step 3 above) usually prevents this.
 
-**`pip install` fails behind a corporate proxy** — set the proxy
-environment variables before running pip:
-`set HTTP_PROXY=http://your.proxy:port` and the same for `HTTPS_PROXY`.
-Your IT team will know the right values.
-
-**`error: input file mentions NAD83 or CSRS`** — the file is in a
-datum this script doesn't handle. Convert the file to WGS84 first
-(your GIS tool can do this) and try again.
-
-## PowerShell version (no Python required)
-
-If you'd rather not install Python, use `convert_poly.ps1`. PowerShell
-is already on every modern Windows machine, so there is nothing to
-install.
-
-Open PowerShell (Start menu → "Windows PowerShell") and run:
-
-```
-.\convert_poly.ps1 path\to\polygon.txt
-```
-
-The first time you run a `.ps1` file, Windows may refuse with a
-message about "running scripts is disabled on this system". To allow
-it for your own user account only, run this once:
+**Red error mentioning execution policy** — open PowerShell once
+(Start menu → "Windows PowerShell") and run:
 
 ```
 Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
 ```
 
-Then try the script again. The output, clipboard behaviour, and piping
-options are the same as the Python version — for example:
+Then try the `.bat` again. This shouldn't be needed because the `.bat`
+already passes `-ExecutionPolicy Bypass`, but corporate Group Policy
+can override that.
+
+**`error: input file mentions NAD83 or CSRS`** — the file is in a
+datum the script refuses to handle. Convert it to WGS84 in your GIS
+tool first and try again.
+
+**`error: no input file specified`** — you ran the `.ps1` directly
+from a non-interactive context (a pipe, a script, or CI). Use the
+`.bat`, drag a file onto it, or pass an explicit path:
+`.\convert_poly.ps1 path\to\polygon.txt`.
+
+## Advanced: command-line use
+
+If you're comfortable with PowerShell, you can run the script directly
+and pipe its output. The format header goes to **stderr** and the
+coordinate data goes to **stdout**, so piping captures only the data:
 
 ```
 .\convert_poly.ps1 polygon.txt | Set-Clipboard
 .\convert_poly.ps1 polygon.txt > out.txt
 ```
 
-To tweak the output format, edit the `Format-Decimal` function near
-the bottom of `convert_poly.ps1` (the equivalent of `format_decimal()`
-in the Python version).
+## Editing the output
 
-## Easy mode: double-click or drag-and-drop (Windows)
-
-If you'd rather not type any commands at all, use `convert_poly.bat`.
-Place the `.bat` and the `.ps1` in the same folder; from there:
-
-- **Double-click** `convert_poly.bat`. A Windows file picker opens —
-  select your `.txt` file and click Open.
-- **Drag** a `.txt` file onto `convert_poly.bat`. It runs against
-  that file straight away.
-
-In both cases the coordinates are auto-copied to your clipboard. A
-console window stays open showing the output (and a "Coordinates
-copied to clipboard." confirmation) until you press a key — so you
-can verify the conversion looks right before paste-time.
-
-If you cancel the file picker, the window closes without doing
-anything.
+To tweak the output format (separator, precision, etc.), edit the
+`Format-Decimal` function near the bottom of `convert_poly.ps1`.
