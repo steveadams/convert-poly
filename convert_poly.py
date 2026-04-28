@@ -10,7 +10,7 @@ Datum: WGS84 only. If the input mentions NAD83 or CSRS, the script aborts
 rather than silently produce wrong coordinates.
 
 Output streams:
-  - The format header ("Format: Decimal Degrees — WGS84") goes to STDERR.
+  - The format header ("Format: Decimal Degrees - WGS84") goes to STDERR.
   - The coordinate data goes to STDOUT.
 This way `convert_poly.py file.txt | clip` puts only the data on the
 clipboard, while running interactively shows both header and data on the
@@ -135,7 +135,7 @@ def format_decimal(
     points: list[tuple[int, float, float, int, int]],
 ) -> tuple[str, str]:
     """Decimal degrees, preserving each token's original precision."""
-    header = "Format: Decimal Degrees — WGS84"
+    header = "Format: Decimal Degrees - WGS84"
     lines = [
         f"{lat:.{lat_dec}f}, {lon:.{lon_dec}f}"
         for _, lat, lon, lat_dec, lon_dec in points

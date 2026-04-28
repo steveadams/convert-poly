@@ -40,20 +40,15 @@ BeforeAll {
         # stderr, and the exit code. Uses Start-Process so it works on
         # Windows PowerShell 5.1 (whose .NET Framework lacks
         # ProcessStartInfo.ArgumentList) as well as PowerShell 7+.
+        # Omit -InputPath entirely to test the missing-argument case.
         param(
-            # AllowEmptyString lets the missing-arg test pass '' here
-            # alongside -OmitInputArg without tripping mandatory-string
-            # validation in PowerShell.
-            [Parameter(Mandatory = $true)]
-            [AllowEmptyString()]
-            [string]$InputPath,
-            [switch]$OmitInputArg
+            [string]$InputPath
         )
         $stdoutFile = [System.IO.Path]::GetTempFileName()
         $stderrFile = [System.IO.Path]::GetTempFileName()
         try {
             $argList = @('-NoProfile', '-NonInteractive', '-File', $script:ScriptPath)
-            if (-not $OmitInputArg) {
+            if ($PSBoundParameters.ContainsKey('InputPath')) {
                 $argList += $InputPath
             }
             $proc = Start-Process `
@@ -334,7 +329,16 @@ Describe 'CLI surface' {
 
     It 'exits non-zero when the input argument is missing' {
         # Mandatory parameter + -NonInteractive -> binding error.
-        $r = Invoke-CliScript -InputPath '' -OmitInputArg
+        $r = Invoke-CliScript
         $r.ExitCode | Should -Not -Be 0
+    }
+}
+
+
+Describe 'Help discoverability' {
+    It 'Get-Help returns a non-empty synopsis mentioning polygon' {
+        $help = Get-Help -Name $script:ScriptPath
+        $help.Synopsis | Should -Not -BeNullOrEmpty
+        $help.Synopsis | Should -Match 'polygon'
     }
 }

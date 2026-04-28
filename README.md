@@ -64,7 +64,7 @@ Example:
 
 ```
 > python convert_poly.py sample_input.txt
-Format: Decimal Degrees — WGS84
+Format: Decimal Degrees - WGS84
 
 53.363333, -129.788333
 53.385278, -129.788333

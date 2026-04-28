@@ -19,6 +19,12 @@
   on the terminal. When STDOUT is a terminal, the data is also auto-copied
   to the clipboard via Set-Clipboard.
 
+  Line endings: data lines are emitted via Write-Output, so STDOUT uses
+  the platform line separator (CRLF on Windows). The Python sibling
+  script always emits LF. This is deliberate - going through the
+  PowerShell pipeline is what makes `... | Set-Clipboard` work, and
+  Windows-native consumers (Excel, email) prefer CRLF anyway.
+
   To change how the output looks (column separator, precision, etc.), edit
   Format-Decimal below.
 
