@@ -41,7 +41,12 @@ BeforeAll {
         # Windows PowerShell 5.1 (whose .NET Framework lacks
         # ProcessStartInfo.ArgumentList) as well as PowerShell 7+.
         param(
-            [Parameter(Mandatory = $true)] [string]$InputPath,
+            # AllowEmptyString lets the missing-arg test pass '' here
+            # alongside -OmitInputArg without tripping mandatory-string
+            # validation in PowerShell.
+            [Parameter(Mandatory = $true)]
+            [AllowEmptyString()]
+            [string]$InputPath,
             [switch]$OmitInputArg
         )
         $stdoutFile = [System.IO.Path]::GetTempFileName()
