@@ -188,6 +188,8 @@ def main() -> None:
                 pyperclip.copy(body)
             except Exception as e:
                 print(f"warning: clipboard copy failed: {e}", file=sys.stderr)
+            else:
+                print("\nCoordinates copied to clipboard.", file=sys.stderr)
 
 
 if __name__ == "__main__":

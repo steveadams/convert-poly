@@ -39,7 +39,11 @@
 #>
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory = $true, Position = 0)]
+    # Optional. When omitted in an interactive session, a Windows file
+    # picker is shown so non-technical users can double-click the .bat
+    # shim and pick a file. When omitted in a non-interactive session
+    # (CI, pipes, scripts) the script errors out with exit code 1.
+    [Parameter(Position = 0)]
     [string]$InputFile
 )
 
@@ -201,8 +205,49 @@ function Format-Decimal {
 
 
 # ---------------------------------------------------------------------------
+# Interactive file picker - shown when no -InputFile is supplied AND the
+# script is being run from a real console (not redirected stdin from CI,
+# a pipeline, or another script). Windows-only because Windows Forms.
+# ---------------------------------------------------------------------------
+
+function Show-InputFilePicker {
+    try {
+        Add-Type -AssemblyName System.Windows.Forms -ErrorAction Stop
+    }
+    catch {
+        throw "no input file specified, and the file picker is unavailable on this platform"
+    }
+    $ofd = New-Object System.Windows.Forms.OpenFileDialog
+    $ofd.Filter = 'Text files (*.txt)|*.txt|All files (*.*)|*.*'
+    $ofd.Title  = 'Select a CHS polygon description file'
+    if ($ofd.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+        return $ofd.FileName
+    }
+    return $null
+}
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
+
+if (-not $InputFile) {
+    if ([Console]::IsInputRedirected) {
+        Write-StdErr "error: no input file specified"
+        exit 1
+    }
+    try {
+        $InputFile = Show-InputFilePicker
+    }
+    catch {
+        Write-StdErr "error: $($_.Exception.Message)"
+        exit 1
+    }
+    if (-not $InputFile) {
+        # User cancelled the dialog - exit quietly.
+        exit 0
+    }
+}
 
 try {
     $points = Read-PolygonFile -Path $InputFile
@@ -230,6 +275,8 @@ if (-not [Console]::IsOutputRedirected) {
     try {
         $body = ($result.Lines -join [Environment]::NewLine) + [Environment]::NewLine
         Set-Clipboard -Value $body
+        Write-StdErr ''
+        Write-StdErr 'Coordinates copied to clipboard.'
     }
     catch {
         Write-StdErr "warning: clipboard copy failed: $($_.Exception.Message)"

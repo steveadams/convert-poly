@@ -12,10 +12,14 @@ your clipboard so you can paste it straight into another program.
   already uses Python or if you're on a non-Windows machine.
 - **`convert_poly.ps1`** — PowerShell version. Pick this one if you
   don't want to install Python; PowerShell is built into Windows.
+- **`convert_poly.bat`** — a one-line wrapper around the PowerShell
+  version that gives you a no-typing experience: double-click it to
+  pop a file picker, or drag a `.txt` onto it to convert that file
+  immediately. See "Easy mode" below.
 
 Both scripts produce identical output. The rest of this README covers
-the Python version first; the PowerShell instructions are at the
-bottom.
+the Python version first; the PowerShell instructions are toward the
+bottom and the easy-mode `.bat` instructions are last.
 
 The scripts assume WGS84. If your file mentions NAD83 or CSRS they
 will refuse to run rather than give you wrong numbers.
@@ -146,3 +150,21 @@ options are the same as the Python version — for example:
 To tweak the output format, edit the `Format-Decimal` function near
 the bottom of `convert_poly.ps1` (the equivalent of `format_decimal()`
 in the Python version).
+
+## Easy mode: double-click or drag-and-drop (Windows)
+
+If you'd rather not type any commands at all, use `convert_poly.bat`.
+Place the `.bat` and the `.ps1` in the same folder; from there:
+
+- **Double-click** `convert_poly.bat`. A Windows file picker opens —
+  select your `.txt` file and click Open.
+- **Drag** a `.txt` file onto `convert_poly.bat`. It runs against
+  that file straight away.
+
+In both cases the coordinates are auto-copied to your clipboard. A
+console window stays open showing the output (and a "Coordinates
+copied to clipboard." confirmation) until you press a key — so you
+can verify the conversion looks right before paste-time.
+
+If you cancel the file picker, the window closes without doing
+anything.

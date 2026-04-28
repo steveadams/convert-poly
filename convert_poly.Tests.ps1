@@ -41,9 +41,15 @@ BeforeAll {
         # Windows PowerShell 5.1 (whose .NET Framework lacks
         # ProcessStartInfo.ArgumentList) as well as PowerShell 7+.
         # Omit -InputPath entirely to test the missing-argument case.
+        #
+        # Stdin is redirected from an empty file so the script's
+        # IsInputRedirected check sees a non-interactive session - this
+        # keeps the missing-arg test from popping a Windows file picker
+        # when a developer runs the suite locally on Windows.
         param(
             [string]$InputPath
         )
+        $stdinFile  = [System.IO.Path]::GetTempFileName()
         $stdoutFile = [System.IO.Path]::GetTempFileName()
         $stderrFile = [System.IO.Path]::GetTempFileName()
         try {
@@ -54,6 +60,7 @@ BeforeAll {
             $proc = Start-Process `
                 -FilePath               $script:PwshExe `
                 -ArgumentList           $argList `
+                -RedirectStandardInput  $stdinFile `
                 -RedirectStandardOutput $stdoutFile `
                 -RedirectStandardError  $stderrFile `
                 -NoNewWindow -PassThru -Wait
@@ -65,6 +72,7 @@ BeforeAll {
                 StdErr   = if ($null -eq $stderr) { '' } else { $stderr }
             }
         } finally {
+            Remove-Item -LiteralPath $stdinFile  -Force -ErrorAction SilentlyContinue
             Remove-Item -LiteralPath $stdoutFile -Force -ErrorAction SilentlyContinue
             Remove-Item -LiteralPath $stderrFile -Force -ErrorAction SilentlyContinue
         }
