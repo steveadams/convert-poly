@@ -313,8 +313,12 @@ if (-not $InputFile) {
 }
 
 try {
-    $points = Read-PolygonFile -Path $InputFile
-    $points = Close-Ring -Points $points
+    # @(...) forces array context. Without it, a single-vertex file makes
+    # PowerShell unwrap the one-element result to a bare hashtable, whose
+    # .Count is its key count (5) and whose [0] is a key miss ($null) - so
+    # Close-Ring then dereferences $null and throws under StrictMode.
+    $points = @(Read-PolygonFile -Path $InputFile)
+    $points = @(Close-Ring -Points $points)
     $result = switch ($Format) {
         'DMS'   { Format-DMS     -Points $points }
         default { Format-Decimal -Points $points }
