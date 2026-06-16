@@ -254,8 +254,8 @@ Describe 'Decimal precision preservation' {
             $r = Invoke-CliScript -InputPath $tmp
             $r.ExitCode | Should -Be 0 -Because $r.StdErr
             $lines = Get-NormalizedLines $r.StdOut
-            $lines[0] | Should -Be '53.36, -125.788333'
-            $lines[1] | Should -Be '53.0, -125.0'
+            $lines[0] | Should -Be '53.36,-125.788333'
+            $lines[1] | Should -Be '53.0,-125.0'
         } finally {
             Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
         }
