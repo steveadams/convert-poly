@@ -80,6 +80,13 @@ If you're comfortable with PowerShell, you can run the script directly and pipe 
 .\convert_poly.ps1 polygon.txt > out.txt
 ```
 
+Choose the output format with `-Format` (`Decimal` is the default; `DMS` emits signed dash-separated degrees-minutes-seconds):
+
+```ps1
+.\convert_poly.ps1 polygon.txt -Format DMS
+.\convert_poly.ps1 polygon.txt -Format Decimal | Set-Clipboard
+```
+
 ## Editing the output
 
-To tweak the output format (separator, precision, etc.), edit the `Format-Decimal` function near the bottom of `convert_poly.ps1`.
+To tweak the output format (separator, precision, etc.), edit the `Format-Decimal` function (or `Format-DMS` / `Convert-DegreesToDMS` for DMS output) near the bottom of `convert_poly.ps1`.
