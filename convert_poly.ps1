@@ -12,7 +12,8 @@
   aborts rather than silently produce wrong coordinates.
 
   Output streams:
-    - The format header ("Format: Decimal Degrees - WGS84") goes to STDERR.
+    - A format header ("Format: Decimal Degrees - WGS84", or "Format:
+      Degrees Minutes Seconds - WGS84" for DMS) goes to STDERR.
     - The coordinate data goes to STDOUT.
   This way `convert_poly.ps1 file.txt | Set-Clipboard` puts only the data
   on the clipboard, while running interactively shows both header and data
@@ -25,16 +26,29 @@
   (Environment.NewLine), not LF.
 
   To change how the output looks (column separator, precision, etc.), edit
-  Format-Decimal below.
+  Format-Decimal (decimal) or Format-DMS / Convert-DegreesToDMS (DMS) below.
+
+  Use -Format to choose the output coordinate format: Decimal (default,
+  signed decimal degrees) or DMS (signed dash-separated degrees-minutes-
+  seconds, (-)dd-mm-ss.ssss).
 
 .PARAMETER InputFile
   Path to the CHS polygon file.
+
+.PARAMETER Format
+  Output coordinate format. 'Decimal' (default) emits signed decimal
+  degrees, e.g. 53.363333,-129.788333. 'DMS' emits signed dash-separated
+  degrees-minutes-seconds, e.g. 53-21-47.9988,-129-47-17.9988. Both are
+  WGS84. Case-insensitive.
 
 .EXAMPLE
   .\convert_poly.ps1 polygon.txt
 
 .EXAMPLE
   .\convert_poly.ps1 polygon.txt | Set-Clipboard
+
+.EXAMPLE
+  .\convert_poly.ps1 polygon.txt -Format DMS
 #>
 [CmdletBinding()]
 param(
@@ -43,7 +57,14 @@ param(
     # shim and pick a file. When omitted in a non-interactive session
     # (CI, pipes, scripts) the script errors out with exit code 1.
     [Parameter(Position = 0)]
-    [string]$InputFile
+    [string]$InputFile,
+
+    # Output coordinate format. 'Decimal' (default) emits signed decimal
+    # degrees; 'DMS' emits signed dash-separated degrees-minutes-seconds
+    # ((-)dd-mm-ss.ssss). ValidateSet is case-insensitive.
+    [Parameter(Position = 1)]
+    [ValidateSet('Decimal', 'DMS')]
+    [string]$Format = 'Decimal'
 )
 
 Set-StrictMode -Version Latest
@@ -203,6 +224,49 @@ function Format-Decimal {
 }
 
 
+function Convert-DegreesToDMS {
+    # Convert a signed decimal degree to '(-)dd-mm-ss.ssss'. The leading
+    # minus marks S/W (matching the decimal output's sign convention);
+    # minutes and seconds are zero-padded to two integer digits, and
+    # seconds are fixed at four decimal places regardless of input precision.
+    param([double]$Value)
+
+    $neg = $Value -lt 0
+    $v   = [math]::Abs($Value)
+
+    $deg = [int][math]::Floor($v)
+    $remMin = ($v - $deg) * 60
+    $min = [int][math]::Floor($remMin)
+    $sec = ($remMin - $min) * 60
+    $sec = [math]::Round($sec, 4, [System.MidpointRounding]::AwayFromZero)
+    # Rounding can push seconds to 60.0000; carry up. A third (degree-level)
+    # carry isn't needed: Read-PolygonFile rejects inputs outside
+    # [-90,90]/[-180,180], so degrees can't round-carry past those bounds.
+    if ($sec -ge 60) { $sec -= 60; $min += 1 }
+    if ($min -ge 60) { $min -= 60; $deg += 1 }
+
+    $sign   = if ($neg) { '-' } else { '' }
+    $minStr = $min.ToString('00', $Invariant)
+    $secStr = $sec.ToString('00.0000', $Invariant)
+    return "$sign$deg-$minStr-$secStr"
+}
+
+
+function Format-DMS {
+    param($Points)
+
+    $header = "Format: Degrees Minutes Seconds - WGS84"
+
+    $lines = New-Object System.Collections.Generic.List[string]
+    foreach ($p in $Points) {
+        $latStr = Convert-DegreesToDMS $p.Lat
+        $lonStr = Convert-DegreesToDMS $p.Lon
+        $lines.Add("$latStr,$lonStr")
+    }
+    return @{ Header = $header; Lines = $lines }
+}
+
+
 # ---------------------------------------------------------------------------
 # Interactive file picker - shown when no -InputFile is supplied AND the
 # script is being run from a real console (not redirected stdin from CI,
@@ -251,7 +315,10 @@ if (-not $InputFile) {
 try {
     $points = Read-PolygonFile -Path $InputFile
     $points = Close-Ring -Points $points
-    $result = Format-Decimal -Points $points
+    $result = switch ($Format) {
+        'DMS'   { Format-DMS     -Points $points }
+        default { Format-Decimal -Points $points }
+    }
 }
 catch {
     Write-StdErr "error: $($_.Exception.Message)"

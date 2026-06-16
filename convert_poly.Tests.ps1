@@ -19,6 +19,9 @@ BeforeAll {
     $script:ExpectedDecimal = Get-Content `
         -LiteralPath (Join-Path $script:Here 'sample_output_decimal.txt') `
         -Raw -Encoding UTF8
+    $script:ExpectedDms = Get-Content `
+        -LiteralPath (Join-Path $script:Here 'sample_output_dms.txt') `
+        -Raw -Encoding UTF8
 
     # Use whichever PowerShell host is running these tests, so the same
     # tests cover both Windows PowerShell 5.1 and PowerShell 7+.
@@ -47,7 +50,8 @@ BeforeAll {
         # keeps the missing-arg test from popping a Windows file picker
         # when a developer runs the suite locally on Windows.
         param(
-            [string]$InputPath
+            [string]$InputPath,
+            [string]$Format
         )
         $stdinFile  = [System.IO.Path]::GetTempFileName()
         $stdoutFile = [System.IO.Path]::GetTempFileName()
@@ -56,6 +60,9 @@ BeforeAll {
             $argList = @('-NoProfile', '-NonInteractive', '-File', $script:ScriptPath)
             if ($PSBoundParameters.ContainsKey('InputPath')) {
                 $argList += $InputPath
+            }
+            if ($PSBoundParameters.ContainsKey('Format')) {
+                $argList += @('-Format', $Format)
             }
             $proc = Start-Process `
                 -FilePath               $script:PwshExe `
@@ -348,5 +355,84 @@ Describe 'Help discoverability' {
         $help = Get-Help -Name $script:ScriptPath
         $help.Synopsis | Should -Not -BeNullOrEmpty
         $help.Synopsis | Should -Match 'polygon'
+    }
+
+    It 'documents the -Format parameter and mentions DMS' {
+        $help = Get-Help -Name $script:ScriptPath -Parameter Format -ErrorAction Stop
+        # .Description.Text is an array of strings on PS 5.1 and a single
+        # string on PS 7; -join handles both shapes.
+        ($help.Description.Text -join ' ') | Should -Match 'DMS'
+    }
+}
+
+
+Describe 'DMS output format' {
+    It 'DMS output matches the sample fixture (line endings normalised)' {
+        $r = Invoke-CliScript -InputPath $script:SamplePath -Format 'DMS'
+        $r.ExitCode | Should -Be 0 -Because $r.StdErr
+        (Get-NormalizedText $r.StdOut) |
+            Should -Be (Get-NormalizedText $script:ExpectedDms)
+    }
+
+    It 'header names the DMS format on stderr and never on stdout' {
+        $r = Invoke-CliScript -InputPath $script:SamplePath -Format 'DMS'
+        $r.StdErr | Should -Match '^Format: '
+        $r.StdErr | Should -Match 'Degrees Minutes Seconds'
+        $r.StdErr | Should -Match 'WGS84'
+        $r.StdOut | Should -Not -Match 'Format:'
+    }
+
+    It 'zero-pads minutes/seconds and keeps four decimal places' {
+        $r = Invoke-CliScript -InputPath $script:SamplePath -Format 'DMS'
+        $lines = Get-NormalizedLines $r.StdOut
+        $lines[1] | Should -Be '53-23-07.0008,-129-47-17.9988'
+    }
+
+    It 'marks W/S with a single leading minus, positive values unsigned' {
+        $r = Invoke-CliScript -InputPath $script:SamplePath -Format 'DMS'
+        $lines = Get-NormalizedLines $r.StdOut
+        $lines[0] | Should -Be '53-21-47.9988,-129-47-17.9988'
+    }
+}
+
+
+Describe 'Format selection' {
+    It 'defaults to decimal when -Format is omitted' {
+        $r = Invoke-CliScript -InputPath $script:SamplePath
+        (Get-NormalizedText $r.StdOut) |
+            Should -Be (Get-NormalizedText $script:ExpectedDecimal)
+    }
+
+    It 'explicit -Format Decimal matches the decimal fixture' {
+        $r = Invoke-CliScript -InputPath $script:SamplePath -Format 'Decimal'
+        $r.ExitCode | Should -Be 0 -Because $r.StdErr
+        (Get-NormalizedText $r.StdOut) |
+            Should -Be (Get-NormalizedText $script:ExpectedDecimal)
+    }
+
+    It 'rejects an unknown -Format value with a non-zero exit' {
+        $r = Invoke-CliScript -InputPath $script:SamplePath -Format 'Banana'
+        $r.ExitCode | Should -Not -Be 0
+    }
+}
+
+
+Describe 'DMS rounding carry' {
+    It 'carries seconds that round to 60 up into minutes and degrees' {
+        # 10.9999999999 deg: the seconds remainder rounds to 60.0000, which the
+        # carry guard rolls into minutes then degrees, yielding 11-00-00.0000.
+        $tmp = New-TempPath
+        Write-PolyInput -Path $tmp -Body "`tLat`tLon`n1`t10.9999999999N`t100.0W`n"
+        try {
+            $r = Invoke-CliScript -InputPath $tmp -Format 'DMS'
+            $r.ExitCode | Should -Be 0 -Because $r.StdErr
+            # @() is REQUIRED here: this input produces a single output line,
+            # which would otherwise be unwrapped to a scalar string, making
+            # $lines[0] index the first character instead of the first line.
+            $lines = @(Get-NormalizedLines $r.StdOut)
+            $lines[0] | Should -Be '11-00-00.0000,-100-00-00.0000'
+        } finally {
+            Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
+        }
     }
 }
