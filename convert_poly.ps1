@@ -197,7 +197,7 @@ function Format-Decimal {
     foreach ($p in $Points) {
         $latStr = $p.Lat.ToString("F$($p.LatDec)", $Invariant)
         $lonStr = $p.Lon.ToString("F$($p.LonDec)", $Invariant)
-        $lines.Add("$latStr, $lonStr")
+        $lines.Add("$latStr,$lonStr")
     }
     return @{ Header = $header; Lines = $lines }
 }
@@ -269,7 +269,7 @@ foreach ($line in $result.Lines) {
 # Auto-copy when running interactively. Clipboard is a nice-to-have.
 # IsOutputRedirected catches `> out.txt` and external pipes like `| clip`.
 # A native PowerShell pipe like `| Set-Clipboard` won't trip it, so the
-# clipboard ends up set twice in that case - same content, harmless.
+# clipboard ends up set twice in that case.
 if (-not [Console]::IsOutputRedirected) {
     try {
         $body = ($result.Lines -join [Environment]::NewLine) + [Environment]::NewLine
