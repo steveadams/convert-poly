@@ -436,3 +436,96 @@ Describe 'DMS rounding carry' {
         }
     }
 }
+
+
+Describe 'DDM input (degrees + decimal minutes)' {
+    It 'converts a DDM vertex to decimal at fixed 6 dp' {
+        $tmp = New-TempPath
+        Write-PolyInput -Path $tmp -Body "`tLat`tLon`n1`t10-30.0N`t100-15.0W`n"
+        try {
+            $r = Invoke-CliScript -InputPath $tmp
+            $r.ExitCode | Should -Be 0 -Because $r.StdErr
+            # @() REQUIRED: single output line would otherwise unwrap to a
+            # scalar string, making [0] index the first character.
+            $lines = @(Get-NormalizedLines $r.StdOut)
+            $lines[0] | Should -Be '10.500000,-100.250000'
+        } finally {
+            Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    It 'renders DDM input to DMS output when -Format DMS is set' {
+        $tmp = New-TempPath
+        Write-PolyInput -Path $tmp -Body "`tLat`tLon`n1`t10-30.0N`t100-15.0W`n"
+        try {
+            $r = Invoke-CliScript -InputPath $tmp -Format 'DMS'
+            $r.ExitCode | Should -Be 0 -Because $r.StdErr
+            $lines = @(Get-NormalizedLines $r.StdOut)
+            $lines[0] | Should -Be '10-30-00.0000,-100-15-00.0000'
+        } finally {
+            Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    It 'rejects DDM minutes >= 60' {
+        $tmp = New-TempPath
+        Write-PolyInput -Path $tmp -Body "`tLat`tLon`n1`t53-72.5N`t125.0W`n"
+        try {
+            $r = Invoke-CliScript -InputPath $tmp
+            $r.ExitCode | Should -Be 1
+            $r.StdErr   | Should -Match 'out of range'
+        } finally {
+            Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
+
+Describe 'DMS input (degrees-minutes-seconds)' {
+    It 'converts a DMS vertex to decimal at fixed 6 dp' {
+        $tmp = New-TempPath
+        Write-PolyInput -Path $tmp -Body "`tLat`tLon`n1`t10-30-00.0N`t100-15-00.0W`n"
+        try {
+            $r = Invoke-CliScript -InputPath $tmp
+            $r.ExitCode | Should -Be 0 -Because $r.StdErr
+            $lines = @(Get-NormalizedLines $r.StdOut)
+            $lines[0] | Should -Be '10.500000,-100.250000'
+        } finally {
+            Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    It 'rejects DMS seconds >= 60' {
+        $tmp = New-TempPath
+        Write-PolyInput -Path $tmp -Body "`tLat`tLon`n1`t53-22-72.5N`t125.0W`n"
+        try {
+            $r = Invoke-CliScript -InputPath $tmp
+            $r.ExitCode | Should -Be 1
+            $r.StdErr   | Should -Match 'out of range'
+        } finally {
+            Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
+
+Describe 'Mixed coordinate formats in one file' {
+    It 'parses a decimal row and a DDM row in the same file' {
+        $body = (@(
+            "`tLat`tLon"
+            "1`t53.5N`t129.5W"
+            "2`t53-45.0N`t129-15.0W"
+        ) -join "`n") + "`n"
+        $tmp = New-TempPath
+        Write-PolyInput -Path $tmp -Body $body
+        try {
+            $r = Invoke-CliScript -InputPath $tmp
+            $r.ExitCode | Should -Be 0 -Because $r.StdErr
+            $lines = @(Get-NormalizedLines $r.StdOut)
+            $lines[0] | Should -Be '53.5,-129.5'           # decimal: precision preserved
+            $lines[1] | Should -Be '53.750000,-129.250000' # DDM: fixed 6 dp
+        } finally {
+            Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
+        }
+    }
+}

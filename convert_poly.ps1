@@ -84,26 +84,68 @@ function Write-StdErr {
 # ---------------------------------------------------------------------------
 
 function Convert-LatLonToken {
-    # Parse a coordinate token like '53.363333N' or '129.788333W'.
-    # Returns @{ Value = <signed decimal>; Decimals = <input precision> }.
+    # Parse a coordinate token in one of three auto-detected forms:
+    #   decimal degrees          '53.363333N'
+    #   degrees-decimal-minutes  '53-22.711152N'   (DDM)
+    #   degrees-minutes-seconds  '53-22-42.69N'    (DMS)
+    # Detection is by the count of '-'-separated components in the numeric
+    # part; a decimal point is allowed only in the last component. Returns
+    # @{ Value = <signed decimal>; Decimals = <decimal places for output> }.
+    # Decimal input preserves its own precision; DDM/DMS use a fixed 6 dp.
     param([string]$Token)
 
-    if ($Token -notmatch '^(\d+(?:\.\d+)?)([NSEW])$') {
+    if ($Token -notmatch '^([0-9.\-]+)([NSEW])$') {
         throw "could not parse coordinate '$Token'"
     }
-    $number = $Matches[1]
-    $hemi   = $Matches[2]
+    $num  = $Matches[1]
+    $hemi = $Matches[2]
 
-    $value = [double]::Parse($number, $Invariant)
-    if ($hemi -eq 'S' -or $hemi -eq 'W') {
-        $value = -$value
+    $parts = $num -split '-'
+    switch ($parts.Count) {
+        1 {
+            # Decimal degrees: degrees may be fractional.
+            if ($parts[0] -notmatch '^\d+(\.\d+)?$') {
+                throw "could not parse coordinate '$Token'"
+            }
+            $value = [double]::Parse($parts[0], $Invariant)
+            if ($parts[0].Contains('.')) {
+                $decimals = ($parts[0].Split('.', 2)[1]).Length
+            } else {
+                $decimals = 0
+            }
+        }
+        2 {
+            # DDM: integer degrees, fractional minutes.
+            if ($parts[0] -notmatch '^\d+$' -or $parts[1] -notmatch '^\d+(\.\d+)?$') {
+                throw "could not parse coordinate '$Token'"
+            }
+            $deg = [double]::Parse($parts[0], $Invariant)
+            $min = [double]::Parse($parts[1], $Invariant)
+            if ($min -ge 60) { throw "minutes out of range in '$Token'" }
+            $value    = $deg + $min / 60.0
+            $decimals = 6
+        }
+        3 {
+            # DMS: integer degrees, integer minutes, fractional seconds.
+            if ($parts[0] -notmatch '^\d+$' -or
+                $parts[1] -notmatch '^\d+$' -or
+                $parts[2] -notmatch '^\d+(\.\d+)?$') {
+                throw "could not parse coordinate '$Token'"
+            }
+            $deg = [double]::Parse($parts[0], $Invariant)
+            $min = [double]::Parse($parts[1], $Invariant)
+            $sec = [double]::Parse($parts[2], $Invariant)
+            if ($min -ge 60) { throw "minutes out of range in '$Token'" }
+            if ($sec -ge 60) { throw "seconds out of range in '$Token'" }
+            $value    = $deg + $min / 60.0 + $sec / 3600.0
+            $decimals = 6
+        }
+        default {
+            throw "could not parse coordinate '$Token'"
+        }
     }
 
-    $decimals = 0
-    if ($number.Contains('.')) {
-        $decimals = ($number.Split('.', 2)[1]).Length
-    }
-
+    if ($hemi -eq 'S' -or $hemi -eq 'W') { $value = -$value }
     return @{ Value = $value; Decimals = $decimals }
 }
 
