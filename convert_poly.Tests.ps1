@@ -22,6 +22,10 @@ BeforeAll {
     $script:ExpectedDms = Get-Content `
         -LiteralPath (Join-Path $script:Here 'sample_output_dms.txt') `
         -Raw -Encoding UTF8
+    $script:DdmSamplePath = Join-Path $script:Here 'sample_input_ddm.txt'
+    $script:ExpectedDdmDecimal = Get-Content `
+        -LiteralPath (Join-Path $script:Here 'sample_output_ddm_decimal.txt') `
+        -Raw -Encoding UTF8
 
     # Use whichever PowerShell host is running these tests, so the same
     # tests cover both Windows PowerShell 5.1 and PowerShell 7+.
@@ -527,5 +531,21 @@ Describe 'Mixed coordinate formats in one file' {
         } finally {
             Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
         }
+    }
+}
+
+
+Describe 'Issue #5 - DDM polygon regression' {
+    It 'parses the issue-5 DDM polygon to the expected decimal output' {
+        $r = Invoke-CliScript -InputPath $script:DdmSamplePath
+        $r.ExitCode | Should -Be 0 -Because $r.StdErr
+        (Get-NormalizedText $r.StdOut) |
+            Should -Be (Get-NormalizedText $script:ExpectedDdmDecimal)
+    }
+
+    It 'does not mistake the Angle/bearing column for a coordinate' {
+        $r = Invoke-CliScript -InputPath $script:DdmSamplePath
+        $lines = @(Get-NormalizedLines $r.StdOut)
+        $lines.Count | Should -Be 6   # 5 vertices + auto-closed ring
     }
 }
