@@ -22,6 +22,10 @@ BeforeAll {
     $script:ExpectedDms = Get-Content `
         -LiteralPath (Join-Path $script:Here 'sample_output_dms.txt') `
         -Raw -Encoding UTF8
+    $script:DdmSamplePath = Join-Path $script:Here 'sample_input_ddm.txt'
+    $script:ExpectedDdmDecimal = Get-Content `
+        -LiteralPath (Join-Path $script:Here 'sample_output_ddm_decimal.txt') `
+        -Raw -Encoding UTF8
 
     # Use whichever PowerShell host is running these tests, so the same
     # tests cover both Windows PowerShell 5.1 and PowerShell 7+.
@@ -434,5 +438,114 @@ Describe 'DMS rounding carry' {
         } finally {
             Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
         }
+    }
+}
+
+
+Describe 'DDM input (degrees + decimal minutes)' {
+    It 'converts a DDM vertex to decimal at fixed 6 dp' {
+        $tmp = New-TempPath
+        Write-PolyInput -Path $tmp -Body "`tLat`tLon`n1`t10-30.0N`t100-15.0W`n"
+        try {
+            $r = Invoke-CliScript -InputPath $tmp
+            $r.ExitCode | Should -Be 0 -Because $r.StdErr
+            # @() REQUIRED: single output line would otherwise unwrap to a
+            # scalar string, making [0] index the first character.
+            $lines = @(Get-NormalizedLines $r.StdOut)
+            $lines[0] | Should -Be '10.500000,-100.250000'
+        } finally {
+            Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    It 'renders DDM input to DMS output when -Format DMS is set' {
+        $tmp = New-TempPath
+        Write-PolyInput -Path $tmp -Body "`tLat`tLon`n1`t10-30.0N`t100-15.0W`n"
+        try {
+            $r = Invoke-CliScript -InputPath $tmp -Format 'DMS'
+            $r.ExitCode | Should -Be 0 -Because $r.StdErr
+            $lines = @(Get-NormalizedLines $r.StdOut)
+            $lines[0] | Should -Be '10-30-00.0000,-100-15-00.0000'
+        } finally {
+            Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    It 'rejects DDM minutes >= 60' {
+        $tmp = New-TempPath
+        Write-PolyInput -Path $tmp -Body "`tLat`tLon`n1`t53-72.5N`t125.0W`n"
+        try {
+            $r = Invoke-CliScript -InputPath $tmp
+            $r.ExitCode | Should -Be 1
+            $r.StdErr   | Should -Match 'out of range'
+        } finally {
+            Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
+
+Describe 'DMS input (degrees-minutes-seconds)' {
+    It 'converts a DMS vertex to decimal at fixed 6 dp' {
+        $tmp = New-TempPath
+        Write-PolyInput -Path $tmp -Body "`tLat`tLon`n1`t10-30-00.0N`t100-15-00.0W`n"
+        try {
+            $r = Invoke-CliScript -InputPath $tmp
+            $r.ExitCode | Should -Be 0 -Because $r.StdErr
+            $lines = @(Get-NormalizedLines $r.StdOut)
+            $lines[0] | Should -Be '10.500000,-100.250000'
+        } finally {
+            Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    It 'rejects DMS seconds >= 60' {
+        $tmp = New-TempPath
+        Write-PolyInput -Path $tmp -Body "`tLat`tLon`n1`t53-22-72.5N`t125.0W`n"
+        try {
+            $r = Invoke-CliScript -InputPath $tmp
+            $r.ExitCode | Should -Be 1
+            $r.StdErr   | Should -Match 'out of range'
+        } finally {
+            Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
+
+Describe 'Mixed coordinate formats in one file' {
+    It 'parses a decimal row and a DDM row in the same file' {
+        $body = (@(
+            "`tLat`tLon"
+            "1`t53.5N`t129.5W"
+            "2`t53-45.0N`t129-15.0W"
+        ) -join "`n") + "`n"
+        $tmp = New-TempPath
+        Write-PolyInput -Path $tmp -Body $body
+        try {
+            $r = Invoke-CliScript -InputPath $tmp
+            $r.ExitCode | Should -Be 0 -Because $r.StdErr
+            $lines = @(Get-NormalizedLines $r.StdOut)
+            $lines[0] | Should -Be '53.5,-129.5'           # decimal: precision preserved
+            $lines[1] | Should -Be '53.750000,-129.250000' # DDM: fixed 6 dp
+        } finally {
+            Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
+
+Describe 'Issue #5 - DDM polygon regression' {
+    It 'parses the issue-5 DDM polygon to the expected decimal output' {
+        $r = Invoke-CliScript -InputPath $script:DdmSamplePath
+        $r.ExitCode | Should -Be 0 -Because $r.StdErr
+        (Get-NormalizedText $r.StdOut) |
+            Should -Be (Get-NormalizedText $script:ExpectedDdmDecimal)
+    }
+
+    It 'does not mistake the Angle/bearing column for a coordinate' {
+        $r = Invoke-CliScript -InputPath $script:DdmSamplePath
+        $lines = @(Get-NormalizedLines $r.StdOut)
+        $lines.Count | Should -Be 6   # 5 vertices + auto-closed ring
     }
 }
