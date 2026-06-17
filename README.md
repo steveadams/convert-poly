@@ -15,6 +15,8 @@
 
 Reads a polygon description file (the kind with columns for index, latitude, longitude, distance, and angle) and prints the polygon's vertices as a list of WGS84 decimal-degree coordinates. The output is auto-copied to your clipboard so you can paste it straight into Excel, CHSDIR, or wherever you need it.
 
+Latitude and longitude can be written as decimal degrees (`53.363333N`), degrees-decimal-minutes (`53-22.711152N`), or degrees-minutes-seconds (`53-22-42.69N`) — the script detects the format of each coordinate automatically, so you can drop in whichever your source file uses.
+
 The script assumes WGS84.
 
 The repo contains two files you actually use:

@@ -8,6 +8,12 @@
   latitude, longitude, ...) and prints the closed polygon ring as one
   "lat, lon" line per vertex.
 
+  Latitude/longitude may be written in any of three forms, auto-detected
+  per coordinate: decimal degrees (53.363333N), degrees-decimal-minutes
+  (53-22.711152N), or degrees-minutes-seconds (53-22-42.69N). All are
+  normalized to decimal internally; the -Format flag controls the
+  output format independently.
+
   Datum: WGS84 only. If the input mentions NAD83 or CSRS, the script
   aborts rather than silently produce wrong coordinates.
 
